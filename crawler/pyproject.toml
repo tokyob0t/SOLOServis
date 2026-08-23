@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soloservis-scrapper"
+version = "0.1.0"
+description = "Asynchronous web crawling and scraping system built on Scrapling + asyncio + SQLite"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "scrapling[fetchers]>=0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+# NOTE: entry point removed; run directly with `python src/__main__.py`
+# (src/ uses plain absolute imports, not package-relative ones).
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
