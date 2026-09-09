@@ -73,6 +73,5 @@ SEED_URLS: list[str] = parse_seed_urls(os.getenv("SCRAPER_SEEDS", ""))
 
 DEFAULT_PARSER_CONFIG: dict = {
     "entity_type": "webpage",
-    "title_selector": None,
     "external_id_selector": None,
 }

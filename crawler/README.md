@@ -55,7 +55,7 @@ VALUES ('Books: Travel', 'https://books.toscrape.com/catalogue/category/books/tr
 
 INSERT INTO SCRAPER_CONFIG (data_source_id, scraper_type, target_type, rate_limit, parser_config)
 VALUES (last_insert_rowid(), 'http', 'webpage', '30/min',
-        '{"entity_type": "webpage", "title_selector": null, "external_id_selector": null}');
+        '{"entity_type": "webpage", "external_id_selector": null}');
 ```
 
 ### Modelo de paralelismo
@@ -105,18 +105,16 @@ Columna JSON de `SCRAPER_CONFIG`. Claves soportadas:
 ```json
 {
   "entity_type": "webpage",
-  "title_selector": null,
   "external_id_selector": null
 }
 ```
 
 * `entity_type` — etiqueta guardada en `SCRAPED_DATA.entity_type`.
-* `title_selector` — selector CSS alternativo para el título.
 * `external_id_selector` — CSS de un `<meta>` cuyo `content` se usará como `external_id`.
 
-El payload extraído (título, description, favicon, h1, status…) se guarda como
-JSON en `SCRAPED_DATA.raw_data`; los enlaces descubiertos se normalizan,
-se filtran por dominio y vuelven a la cola del crawler.
+El HTML completo de cada página se guarda tal cual en `SCRAPED_DATA.raw_data`;
+los enlaces descubiertos se normalizan, se filtran por dominio y vuelven a la
+cola del crawler.
 
 ## Logging
 

@@ -153,7 +153,7 @@ CREATE TABLE SCRAPED_DATA (
     external_id TEXT,
     external_url TEXT NOT NULL,
     entity_type TEXT NOT NULL,
-    raw_data TEXT, -- JSON string or HTML snippet containing extracted payload
+    raw_data TEXT, -- full raw HTML source of the fetched webpage
     extracted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (scrape_run_id) REFERENCES SCRAPE_RUN(id) ON DELETE CASCADE
 );
@@ -268,7 +268,7 @@ project/
 * `external_id` (if available in page)
 * `external_url` (canonical/target URL)
 * `entity_type` (e.g., page title, article, product)
-* `raw_data` (JSON string or extracted content string)
+* `raw_data` (full raw HTML source of the fetched webpage)
 * Discovered links for the crawler queue
 
 

@@ -59,5 +59,5 @@ class ScrapeResult:
     external_id: str | None
     external_url: str
     entity_type: str
-    raw_data: str  # JSON string payload
+    raw_data: str  # full raw HTML source of the fetched webpage
     links: list[str] = field(default_factory=list)

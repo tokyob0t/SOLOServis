@@ -6,7 +6,6 @@ scraper and persistence to :mod:`crawler.database`.
 """
 
 import asyncio
-import json
 import time
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
@@ -14,7 +13,7 @@ from urllib.parse import urlparse
 import config as cfg
 from database import create_scrape_run, finish_scrape_run, save_scraped_data, update_run_stats
 from models import DataSource, FetchOutcome, ScraperConfig, ScrapeResult
-from processor import clean_payload, process_links
+from processor import process_links
 from scraper import Scraper
 from utils import get_logger, parse_rate_limit, same_site
 
@@ -151,9 +150,6 @@ class Crawler:
                 return
 
             result.links = process_links(result.links, result.external_url)
-            payload = json.loads(result.raw_data)
-            result.raw_data = json.dumps(clean_payload(payload),
-                                         ensure_ascii=False)
             await asyncio.to_thread(save_scraped_data, self.db_path,
                                     self.run_id, result)
             self.visited.add(url)

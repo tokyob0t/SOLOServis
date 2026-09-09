@@ -5,7 +5,6 @@ turns a URL into (a) a structured :class:`ScrapeResult` payload and
 (b) the raw links discovered on the page.
 """
 
-import json
 from typing import Any
 
 from scrapling.fetchers import AsyncFetcher
@@ -15,21 +14,15 @@ from models import FetchOutcome, ScrapeResult
 from utils import normalize_url
 
 
-def _selector_text(document: Any,
-                   selector: str | None,
-                   default: str | None = None) -> str | None:
-    """Run an optional CSS selector returning its first text node."""
-    if not selector:
-        return default
-    try:
-        values = document.css(f"{selector} ::text").getall()
-    except Exception:
-        values = []
-    for value in values:
-        value = value.strip()
-        if value:
-            return value
-    return default
+def _document_html(document: Any) -> str:
+    """Return the full raw HTML source of a fetched document."""
+    body = getattr(document, "body", None)
+    if isinstance(body, bytes):
+        encoding = getattr(document, "encoding", None) or "utf-8"
+        return body.decode(encoding, errors="replace")
+    if isinstance(body, str):
+        return body
+    return str(document)
 
 
 def _meta_content(document: Any, css_selector: str) -> str | None:
@@ -50,7 +43,6 @@ class Scraper:
     def __init__(self, parser_config: dict | None = None):
         parser_config = parser_config or {}
         self.entity_type: str = parser_config.get("entity_type", "webpage")
-        self.title_selector: str | None = parser_config.get("title_selector")
         self.external_id_selector: str | None = parser_config.get(
             "external_id_selector")
 
@@ -83,56 +75,15 @@ class Scraper:
         )
 
     def parse(self, outcome: FetchOutcome) -> ScrapeResult | None:
-        """Extract a structured payload plus raw links from a fetched page."""
+        """Turn a fetched page into a payload plus the raw links discovered."""
         if not outcome.ok or outcome.document is None or outcome.final_url is None:
             return None
 
         document = outcome.document
 
-        title = _selector_text(document, self.title_selector)
-        if title is None:
-            title = _selector_text(document, "title")
-
-        description = _meta_content(document, 'meta[name="description"]')
-        og_url = _meta_content(document, 'meta[property="og:url"]')
-
         external_id: str | None = None
         if self.external_id_selector:
             external_id = _meta_content(document, self.external_id_selector)
-
-        favicon: str | None = None
-        try:
-            link_elements = document.css("link")
-        except Exception:
-            link_elements = []
-        for element in link_elements:
-            rel = (element.attrib.get("rel") or "").lower()
-            if "icon" in rel:
-                href = element.attrib.get("href")
-                if href:
-                    favicon = normalize_url(href, outcome.final_url)
-                    break
-        if favicon is None:
-            favicon = normalize_url("/favicon.ico", outcome.final_url)
-
-        h1_values: list[str] = []
-        try:
-            h1_values = [
-                t.strip() for t in document.css("h1 ::text").getall()
-                if t.strip()
-            ]
-        except Exception:
-            pass
-
-        payload = {
-            "title": title,
-            "description": description,
-            "favicon": favicon,
-            "og_url": og_url,
-            "h1": h1_values[:5],
-            "http_status": outcome.status,
-            "final_url": outcome.final_url,
-        }
 
         raw_links: list[str] = []
         try:
@@ -144,6 +95,6 @@ class Scraper:
             external_id=external_id,
             external_url=outcome.final_url,
             entity_type=self.entity_type,
-            raw_data=json.dumps(payload, ensure_ascii=False),
+            raw_data=_document_html(document),
             links=raw_links,
         )

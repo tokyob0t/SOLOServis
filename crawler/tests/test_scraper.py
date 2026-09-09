@@ -1,5 +1,3 @@
-import json
-
 from scrapling.parser import Adaptor
 
 from models import FetchOutcome
@@ -29,15 +27,10 @@ def _outcome(html=HTML, final_url="https://example.com/pagina"):
 
 
 class TestParse:
-    def test_extracts_payload_fields(self):
+    def test_raw_data_is_full_html(self):
         result = Scraper().parse(_outcome())
         assert result is not None
-        payload = json.loads(result.raw_data)
-        assert payload["title"] == "Mi Página"
-        assert payload["description"] == "Una descripción"
-        assert payload["favicon"] == "https://example.com/static/favicon.png"
-        assert payload["http_status"] == 200
-        assert "Encabezado" in payload["h1"]
+        assert result.raw_data == HTML
 
     def test_extracts_raw_links(self):
         result = Scraper().parse(_outcome())
@@ -63,12 +56,6 @@ class TestParse:
     def test_returns_none_on_bad_outcome(self):
         assert Scraper().parse(FetchOutcome(status=None, error="boom")) is None
         assert Scraper().parse(FetchOutcome(status=404, error="HTTP 404")) is None
-
-    def test_favicon_fallback_when_missing(self):
-        html = "<html><head><title>t</title></head><body></body></html>"
-        result = Scraper().parse(_outcome(html))
-        payload = json.loads(result.raw_data)
-        assert payload["favicon"] == "https://example.com/favicon.ico"
 
 
 class TestFetchOutcome:
