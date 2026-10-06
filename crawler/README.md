@@ -116,6 +116,77 @@ El HTML completo de cada página se guarda tal cual en `SCRAPED_DATA.raw_data`;
 los enlaces descubiertos se normalizan, se filtran por dominio y vuelven a la
 cola del crawler.
 
+## Extractor: del HTML a filas insertables
+
+`scraper.py` archiva páginas enteras. `extractor.py` extrae *campos* de ellas y
+los convierte a los tipos que exige el schema de producción
+(`backend/database/migrations/001_schema.sql`). El spec declarativo dice
+*dónde* está cada valor; los contratos de columna (largos `VARCHAR(n)`, escalas
+`NUMERIC(p,s)`, enums de `CHECK`) están transcritos del schema, así que un precio
+scrapeado llega como `NUMERIC(12,2)` y una condición como uno de los tres
+valores permitidos.
+
+```python
+from scraper import Scraper
+from extractor import EntitySpec, Extractor, export_jsonl
+
+spec = EntitySpec.from_parser_config({
+    "entity_type": "product_offer",
+    "root": "article.product_pod",
+    "fields": {
+        "price":        ".price_color",
+        "list_price":   ".price_color s",
+        "currency":     {"selector": ".currency", "default": "CLP"},
+        "available":    {"selector": ".instock", "mode": "list", "attribute": "class"},
+        "condition":    {"selector": ".condition", "default": "new"},
+        "product_url":  {"selector": "h3 a", "mode": "attr", "attribute": "href"},
+    },
+    "references": {"store": ".store-name"},
+})
+
+outcome = await Scraper().fetch(url)
+rows = Extractor(spec).extract_all(outcome.document, outcome.final_url)
+export_jsonl(rows, "out/offers.jsonl")   # una fila JSON por línea
+```
+
+### `parser_config` para extracción
+
+| Clave | Significado |
+|---|---|
+| `entity_type` | Tabla destino: `product`, `product_offer`, `service`, `service_offer`, `store`, `provider`, `brand`, `location`, … |
+| `root` | CSS del contenedor de cada item en páginas de listado. Sin `root`, el spec extrae una sola fila (página de detalle). |
+| `fields` | Mapa `columna → selector CSS` o `columna → {selector, mode, attribute, transform, default}`. |
+| `references` | Mapa de **claves naturales** (no ids) que la ingesta debe resolver. |
+
+Un valor de `fields` puede ser un string CSS pelado (`".title::text"`) o un
+objeto. Campos del objeto:
+
+| Campo | Por defecto | Significado |
+|---|---|---|
+| `selector` | — | CSS o XPath. Obligatorio. |
+| `mode` | `"text"` | `text` (primer match), `html` (HTML exterior), `attr` (atributo, primer match), `list` (**todos** los matches). |
+| `attribute` | — | Nombre del atributo. Gana sobre el texto: `{"mode": "list", "attribute": "src"}` recolecta todos los `src`. |
+| `transform` | el de la columna | `text`, `number`, `price`, `integer`, `boolean`, `currency`, `url`, `condition`, `billing_period`, `coordinate`. |
+| `default` | el de la columna | Valor cuando el selector no matchea **o** el valor no se puede leer. Gana sobre el default de la columna. |
+
+### Garantías
+
+* **Nunca se inventan claves foráneas.** `product.category_id` es una identidad
+  del servidor; un scraper solo puede emitir la clave natural. Por eso
+  `references` es aparte de `fields`: la ingesta resuelve `category` →
+  `product_category.id`.
+* **Los fallos se acumulan, no se lanzan.** Una `Extraction` lleva `errors`; un
+  campo ilegible no cuesta la página entera.
+* **Sobre-longitud se recorta y se reporta** (`VARCHAR(n)` en PostgreSQL rechaza
+  el valor, no lo trunca). Es una pérdida visible, nunca silenciosa.
+* `Decimal` se serializa como **string** en el JSONB: PostgreSQL castea un
+  literal numérico desde texto de forma exacta, mientras que un float ya habría
+  perdido centavos al escribirse.
+
+Tablas con contrato completo: `product`, `product_image`, `brand`,
+`product_category`, `product_offer`, `service`, `service_category`,
+`service_offer`, `store`, `provider`, `location`.
+
 ## Logging
 
 Mensajes en inglés con etiqueta por componente:
