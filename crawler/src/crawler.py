@@ -101,6 +101,7 @@ class Crawler:
         self._active = 0
         self._idle = asyncio.Event()
         self._idle.set()
+        self._stopping = False
         self._workers: list[asyncio.Task] = []
         self.records_found = 0
         self.records_processed = 0
@@ -203,7 +204,13 @@ class Crawler:
     # -- public API ------------------------------------------------------------
 
     async def run(self) -> CrawlSummary:
-        """Run the crawl and finalize its SCRAPE_RUN row."""
+        """Run the crawl and finalize its SCRAPE_RUN row.
+
+        Raises :class:`asyncio.CancelledError` *without* touching the SCRAPE_RUN
+        row when :meth:`aclose` was called while the crawl was still draining.
+        An aborted crawl never finalizes itself: it re-raises so the caller owns
+        the final state (see ``main._finalize_interrupted``).
+        """
         seeds = [self.source.base_url]
         for seed in seeds:
             self._submit(seed, depth=0)
@@ -214,7 +221,14 @@ class Crawler:
         ]
 
         await self._idle.wait()
-        await self.aclose()
+        await self._reap_workers()
+
+        if self._stopping:
+            # Workers were cancelled from the outside: this is an abort, not a
+            # graceful drain. Cancelling workers also trips `_idle`, so without
+            # this check the run would be finalized as "completed" even though
+            # most of its pages were never visited.
+            raise asyncio.CancelledError
 
         status = "completed"
         error_message: str | None = None
@@ -246,7 +260,7 @@ class Crawler:
         )
         return summary
 
-    async def aclose(self) -> None:
+    async def _reap_workers(self) -> None:
         """Cancel and reap every worker task; safe to call multiple times."""
         workers, self._workers = self._workers, []
         for worker in workers:
@@ -254,6 +268,15 @@ class Crawler:
                 worker.cancel()
         if workers:
             await asyncio.gather(*workers, return_exceptions=True)
+
+    async def aclose(self) -> None:
+        """Abort the crawl and tear down the worker pool.
+
+        Marks the crawler as stopping *before* cancelling the workers, so
+        :meth:`run` can tell an abort apart from a graceful drain. Idempotent.
+        """
+        self._stopping = True
+        await self._reap_workers()
 
 
 def start_run(

@@ -40,7 +40,7 @@ El sistema utilizará una arquitectura separada por capas:
 | Generación de código SQL   | sqlc                        |
 | Caché                      | Redis                       |
 | Scraping                   | Python                      |
-| Framework de scraping      | Scrapy                      |
+| Framework de scraping      | Scrapling                   |
 | Automatización web         | Playwright                  |
 | Procesamiento de datos     | Go Workers                  |
 | Almacenamiento RAW inicial | JSONL                       |
