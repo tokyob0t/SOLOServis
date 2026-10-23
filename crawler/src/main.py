@@ -28,7 +28,7 @@ from database import (
     get_active_jobs,
     init_db,
 )
-from models import DataSource, ScraperConfig
+from models import RUN_STATUS_FAILED, RUN_STATUS_SUCCESS, DataSource, ScraperConfig
 from utils import configure_logging, get_logger
 
 _log_init = get_logger("INIT")
@@ -66,7 +66,7 @@ async def _finalize_interrupted(crawler) -> None:
     await crawler.aclose()
     _finalize(
         crawler,
-        "failed",
+        RUN_STATUS_FAILED,
         "interrupted by user (Ctrl+C); partial stats persisted",
     )
     _log_task.warning("run #%d interrupted before completion", crawler.run_id)
@@ -92,20 +92,21 @@ async def run_job(
         await _finalize_interrupted(crawler)
         return CrawlSummary(
             run_id=crawler.run_id,
-            status="failed",
+            status=RUN_STATUS_FAILED,
             pages_found=crawler.records_found,
             pages_processed=crawler.records_processed,
             pages_failed=crawler.records_failed,
         )
     except Exception as exc:  # a broken source must not kill its siblings
         await crawler.aclose()
-        _finalize(crawler, "failed", f"{type(exc).__name__}: {exc}")
+        _finalize(crawler, RUN_STATUS_FAILED, f"{type(exc).__name__}: {exc}")
         _log_task.error("run #%d crashed: %s: %s", crawler.run_id,
                         type(exc).__name__, exc)
         return None
 
     elapsed = time.monotonic() - started
-    level = logging.INFO if summary.status == "completed" else logging.WARNING
+    level = (logging.INFO if summary.status == RUN_STATUS_SUCCESS
+             else logging.WARNING)
     _log_task.log(
         level,
         "run #%d finished: found=%d processed=%d failed=%d in %.1fs [%s]",
@@ -301,14 +302,14 @@ def _handle_interrupt(runners: list[_ThreadRunner]) -> int:
 
 
 def _report(results: list) -> None:
-    completed = sum(1 for s in results if s.status == "completed")
-    failed = sum(1 for s in results if s.status != "completed")
+    succeeded = sum(1 for s in results if s.status == RUN_STATUS_SUCCESS)
+    failed = sum(1 for s in results if s.status != RUN_STATUS_SUCCESS)
     totals_found = sum(s.pages_found for s in results)
     totals_ok = sum(s.pages_processed for s in results)
     totals_bad = sum(s.pages_failed for s in results)
     _log_summary.info(
-        "sources=%d completed=%d failed=%d | pages found=%d processed=%d errors=%d",
-        len(results), completed, failed, totals_found, totals_ok, totals_bad,
+        "sources=%d succeeded=%d failed=%d | pages found=%d processed=%d errors=%d",
+        len(results), succeeded, failed, totals_found, totals_ok, totals_bad,
     )
     if failed:
         _log_summary.warning("%d run(s) did not complete successfully", failed)

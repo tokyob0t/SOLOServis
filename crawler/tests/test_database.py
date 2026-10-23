@@ -1,7 +1,10 @@
+import sqlite3
+
 import pytest
 
 import config as cfg
 import database as db
+from models import RUN_STATUSES
 
 
 @pytest.fixture()
@@ -113,7 +116,7 @@ class TestRunLifecycle:
         db.finish_scrape_run(
             db_path,
             run_id,
-            "completed",
+            "success",
             error_message=None,
             records_found=3,
             records_processed=2,
@@ -121,7 +124,7 @@ class TestRunLifecycle:
         )
 
         row = db.get_run(db_path, run_id)
-        assert row["status"] == "completed"
+        assert row["status"] == "success"
         assert row["finished_at"] is not None
         assert (row["records_found"], row["records_processed"], row["records_failed"]) == (3, 2, 1)
 
@@ -159,3 +162,52 @@ class TestRunLifecycle:
         conn.close()
 
         assert db.count_table(db_path, "SCRAPED_DATA") == 0
+
+
+class TestRunStatusVocabulary:
+    """The status values must stay inside the production schema's CHECK.
+
+    ``scrape_run.status`` is ``CHECK (status IN ('pending', 'running',
+    'success', 'failed'))`` in the target PostgreSQL schema. A value outside
+    that set is rejected at ingestion time, so it is enforced locally too.
+    """
+
+    def test_the_vocabulary_matches_the_schema(self):
+        assert RUN_STATUSES == {"pending", "running", "success", "failed"}
+
+    def test_the_old_completed_value_is_not_in_the_vocabulary(self):
+        assert "completed" not in RUN_STATUSES
+
+    def test_finish_rejects_a_foreign_status(self, db_path):
+        source_id = _insert_source(db_path)
+        conn = db.connect(db_path)
+        config_id = conn.execute(
+            "INSERT INTO SCRAPER_CONFIG (data_source_id, scraper_type, target_type)"
+            " VALUES (?, 'http', 'webpage')",
+            (source_id,),
+        ).lastrowid
+        conn.commit()
+        conn.close()
+        run_id = db.create_scrape_run(db_path, config_id)
+
+        with pytest.raises(ValueError, match="invalid scrape_run status"):
+            db.finish_scrape_run(db_path, run_id, "completed")
+        assert db.get_run(db_path, run_id)["status"] == "running"
+
+    def test_the_sqlite_check_constraint_also_rejects_it(self, db_path):
+        source_id = _insert_source(db_path)
+        conn = db.connect(db_path)
+        config_id = conn.execute(
+            "INSERT INTO SCRAPER_CONFIG (data_source_id, scraper_type, target_type)"
+            " VALUES (?, 'http', 'webpage')",
+            (source_id,),
+        ).lastrowid
+        conn.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO SCRAPE_RUN (scraper_config_id, started_at, status)"
+                " VALUES (?, CURRENT_TIMESTAMP, 'completed')",
+                (config_id,),
+            )
+        conn.close()

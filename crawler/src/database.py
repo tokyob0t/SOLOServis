@@ -10,7 +10,13 @@ from collections.abc import Iterable
 from contextlib import closing
 
 import config as cfg
-from models import DataSource, ScraperConfig, ScrapeResult
+from models import (
+    RUN_STATUS_RUNNING,
+    RUN_STATUSES,
+    DataSource,
+    ScraperConfig,
+    ScrapeResult,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS DATA_SOURCE (
@@ -45,7 +51,11 @@ CREATE TABLE IF NOT EXISTS SCRAPE_RUN (
     records_found INTEGER DEFAULT 0,
     records_processed INTEGER DEFAULT 0,
     records_failed INTEGER DEFAULT 0,
-    status TEXT NOT NULL,
+    -- Mirrors the production CHECK constraint in 001_schema.sql. Enforced here
+    -- too so an invalid status cannot be stored locally and only surface as a
+    -- rejected INSERT during ingestion.
+    status TEXT NOT NULL
+        CHECK (status IN ('pending', 'running', 'success', 'failed')),
     error_message TEXT,
     FOREIGN KEY (scraper_config_id) REFERENCES SCRAPER_CONFIG(id) ON DELETE CASCADE
 );
@@ -169,8 +179,8 @@ def create_scrape_run(db_path: str, scraper_config_id: int) -> int:
     with closing(connect(db_path)) as conn, conn:
         cursor = conn.execute(
             "INSERT INTO SCRAPE_RUN (scraper_config_id, started_at, status)"
-            " VALUES (?, CURRENT_TIMESTAMP, 'running')",
-            (scraper_config_id, ),
+            " VALUES (?, CURRENT_TIMESTAMP, ?)",
+            (scraper_config_id, RUN_STATUS_RUNNING),
         )
         return int(cursor.lastrowid)
 
@@ -210,6 +220,10 @@ def finish_scrape_run(
     records_processed: int | None = None,
     records_failed: int | None = None,
 ) -> None:
+    if status not in RUN_STATUSES:
+        raise ValueError(
+            f"invalid scrape_run status {status!r}: the schema accepts only "
+            f"{sorted(RUN_STATUSES)}")
     stats_sql = ""
     values: list = [status]
     counters = {

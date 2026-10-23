@@ -93,7 +93,7 @@ class TestCrawlerRun:
         assert summary.pages_found == 3  # seed + a + b (sin duplicados ni /deep)
         assert summary.pages_processed == 3
         assert summary.pages_failed == 0
-        assert summary.status == "completed"
+        assert summary.status == "success"
         assert summary.visited_urls == sorted(
             ["https://site.test/", "https://site.test/a", "https://site.test/b"]
         )
@@ -146,7 +146,7 @@ class TestCrawlerRun:
         summary = _run(_crawler(env, FakeScraper(pages)))
 
         row = db.get_run(env["db_path"], summary.run_id)
-        assert row["status"] == "completed"
+        assert row["status"] == "success"
         assert row["records_found"] == 2
         assert row["records_processed"] == 2
         assert row["finished_at"] is not None

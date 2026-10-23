@@ -12,7 +12,14 @@ from urllib.parse import urlparse
 
 import config as cfg
 from database import create_scrape_run, finish_scrape_run, save_scraped_data, update_run_stats
-from models import DataSource, FetchOutcome, ScraperConfig, ScrapeResult
+from models import (
+    RUN_STATUS_FAILED,
+    RUN_STATUS_SUCCESS,
+    DataSource,
+    FetchOutcome,
+    ScraperConfig,
+    ScrapeResult,
+)
 from processor import process_links
 from scraper import Scraper
 from utils import get_logger, parse_rate_limit, same_site
@@ -26,7 +33,7 @@ class CrawlSummary:
     pages_found: int = 0
     pages_processed: int = 0
     pages_failed: int = 0
-    status: str = "completed"
+    status: str = RUN_STATUS_SUCCESS
     error_message: str | None = None
     visited_urls: list[str] = field(default_factory=list)
 
@@ -226,14 +233,14 @@ class Crawler:
         if self._stopping:
             # Workers were cancelled from the outside: this is an abort, not a
             # graceful drain. Cancelling workers also trips `_idle`, so without
-            # this check the run would be finalized as "completed" even though
+            # this check the run would be finalized as a success even though
             # most of its pages were never visited.
             raise asyncio.CancelledError
 
-        status = "completed"
+        status = RUN_STATUS_SUCCESS
         error_message: str | None = None
         if self.records_failed > 0 and self.records_processed == 0:
-            status = "failed"
+            status = RUN_STATUS_FAILED
             error_message = "; ".join(self.errors[:10]) or None
         elif self.errors:
             error_message = "; ".join(self.errors[:10])

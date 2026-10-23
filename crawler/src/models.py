@@ -3,6 +3,21 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+# The exact vocabulary the production schema accepts:
+#   status VARCHAR(20) NOT NULL DEFAULT 'pending'
+#     CHECK (status IN ('pending', 'running', 'success', 'failed'))
+# in backend/database/migrations/001_schema.sql. Defined once here because a
+# value outside this set is rejected by PostgreSQL on insert -- the crawler used
+# to write "completed", which would have failed at ingestion time.
+RUN_STATUS_PENDING = "pending"
+RUN_STATUS_RUNNING = "running"
+RUN_STATUS_SUCCESS = "success"
+RUN_STATUS_FAILED = "failed"
+
+RUN_STATUSES: frozenset[str] = frozenset({
+    RUN_STATUS_PENDING, RUN_STATUS_RUNNING, RUN_STATUS_SUCCESS, RUN_STATUS_FAILED,
+})
+
 
 @dataclass(slots=True)
 class DataSource:
@@ -34,7 +49,7 @@ class ScrapeRun:
     records_found: int = 0
     records_processed: int = 0
     records_failed: int = 0
-    status: str = "pending"
+    status: str = RUN_STATUS_PENDING
     error_message: str | None = None
 
 
