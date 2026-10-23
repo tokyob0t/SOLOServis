@@ -258,12 +258,12 @@ _CURRENCY_RE = re.compile(r"\b([A-Za-z]{3})(?![A-Za-z])")
 
 _TRUE_WORDS = frozenset({
     "1", "true", "t", "yes", "y", "si", "sí", "available", "disponible",
-    "activo", "active", "en stock", "instantaneo", "instantáneo",
+    "activo", "active", "en stock", "in stock", "instantaneo", "instantáneo",
 })
 _FALSE_WORDS = frozenset({
-    "0", "false", "f", "no", "n", "agotado", "sin stock", "unavailable",
-    "indisponible", "inactivo", "disabled", "ultimas unidades",
-    "últimas unidades",
+    "0", "false", "f", "no", "n", "agotado", "sin stock", "out of stock",
+    "unavailable", "indisponible", "inactivo", "disabled",
+    "ultimas unidades", "últimas unidades",
 })
 
 _ENUM_ALIASES: dict[str, dict[str, str]] = {
